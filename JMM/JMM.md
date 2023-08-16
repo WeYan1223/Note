@@ -62,79 +62,23 @@
 * 对于编译器，通过禁止特定类型的编译器重排序的方式来禁止重排序
 * 对于处理器，通过插入内存屏障的方式来禁止特定类型的处理器重排序
 
-下面是一个未完善的双重检测锁（`DCL Double-Check-Lock`）实现单例
+> `happens-before`
 
-````java
-public class Singleton {
-    private static Singleton INSTANCE = null;
-    
-    private Singleton() {
-        
-    }
-    
-    public static Singleton getInstance() {
-        //INSTANCE为空，准备进入synchronized代码块
-        if (INSTANCE == null) {
-            //此时如果有其他线程进入代码块，那么阻塞自己
-            synchronized (Singleton.class) {
-                //可能有其他线程已经创建实例了，所以需要二次判断
-                if (INSTANCE == null) {
-                    INSTANCE = new Singleton();
-                }
-            }
-        }
-        return INSTANCE;
-    }
-}
-````
+`happens-before` 是 `JMM` 对开发者的承诺：如果 `A happens-before B`，那么 `A` 操作肯定在 `B` 操作之前完成，但是不代表这里面不会发生指令重排，只要不改变单线程下程序的执行结果，编译器和处理器怎么优化都行
 
-这样写看起来天衣无缝，但是这里面也有可能出现指令重排
+`JMM` 定义了如下 `happens-before` 规则：
 
-````java
-INSTANCE = new Singleton();
-````
+* 程序次序规则：线程中的每个操作 `happens-before` 任意后续操作
+* 锁定规则：解锁  `happens-before` 对同一个锁的加锁操作
+* `volatile` 规则：对 `volatile` 变量的写操作 `happens-before` 读操作
+* 传递规则：如果 `A happens-before B`，且 `B happens-before C`，那么 `A happens-before C`
+* 线程启动规则：线程 `A` 执行 `ThreadB.start()`，`ThreadB.start()` `happens-before` 线程 `B` 中的任意操作
+* 线程中断规则：对线程 `interrupt()` 方法的调用 `happens-before` 被中断线程的代码检测到中断事件的发生
 
-上面这行代码对应的字节码如下
+***
 
-````java
-17: new           #3                  //为Singleton对象分配空间，并把其引用放入操作数栈
-20: dup                               //将操作数栈顶元素复制一份，继续压入操作数栈
-21: invokespecial #4                  //调用构造方法进行初始化
-24: putstatic     #2                  //将引用赋值给INSTANCE
-````
+#### 内存屏障
 
-对于21、24行的字节码指令，执行顺序是有可能被重新排序的，那么就有可能出现下面这种情况
+> 内存屏障可以理解为 `JMM` 为了实现 `happens-before` 规则而使用的底层技术之一
 
-1. 线程 1 判断 `INSTANCE` 为空，并且获取到 `monitor`，成功进入 `synchronized` 代码块
-2. 线程 1 二次判断 `INSTANCE` 依然为空，执行 `INSTANCE = new Singleton();`
-3. 当线程 1 执行完第 24 行字节码（由于指令重排，并未执行 21 行），时间片结束
-4. 线程 2 判断 `INSTANCE` 发现不为空，直接返回 `INSTANCE` 对象
-5. 线程 2 调用 `INSTANCE` 对象的方法，但此时 `INSTANCE` 对象并未被初始化（异常情况）
-6. 线程 1 执行第 21 行字节码对 `INSTANCE` 对象进行初始化
-
-所以，需要使用 `volatile` 禁止指令重排
-
-````java
-public class Singleton {
-    private static volatile Singleton INSTANCE = null;
-    
-    private Singleton() {
-        
-    }
-    
-    public static Singleton getInstance() {
-        //INSTANCE为空，准备进入synchronized代码块
-        if (INSTANCE == null) {
-            //此时如果有其他线程进入代码块，那么阻塞自己
-            synchronized (Singleton.class) {
-                //可能有其他线程已经创建实例了，所以需要二次判断
-                if (INSTANCE == null) {
-                    INSTANCE = new Singleton();
-                }
-            }
-        }
-        return INSTANCE;
-    }
-}
-````
-
+为了实现 `happens-before` 规则，`JMM` 依赖于硬件层面提供的内存屏障机制，通过在适当的指令位置插入内存屏障，确保某些操作执行的顺序
