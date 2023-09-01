@@ -1,13 +1,35 @@
 #### 修饰符
 
-|             | 类内部 | 本包 | 子类 | 外包 |
-| ----------- | ------ | ---- | ---- | ---- |
-| `public`    | Y      | Y    | Y    | Y    |
-| `protected` | Y      | Y    | Y    | X    |
-| `default`   | Y      | Y    | X    | X    |
-| `private`   | Y      | X    | X    | X    |
+`Java` 提供了四种可见性修饰符：`public`、``、`protected` 以及默认修饰（即不加修饰）
 
-其中 `default` 为不加修饰符
+> 最外层声明
+
+最外层的只能被 `public` 修饰或不修饰
+
+```java
+/**
+ * 随处可见
+ */
+public class Main {
+
+}
+```
+
+````java
+/**
+ * 本包可见
+ */
+class Main {
+
+}
+````
+
+> 类内部声明
+
+- `public`：随处可见
+- `private`：子类可见
+- `protected`：类内部可见、子类可见
+- 不修饰：本包可见
 
 ***
 
@@ -122,16 +144,17 @@ public static void main(String[] args) {
   }
   ````
   
+
 首先 `a + b` 算数表达式会进行拆箱操作，得到 `int` 数值 200，然后进行装箱得到值为 200 的 `Integer` 对象
-  
+
 ````java
   public static void main(String[] args) {
       Long c = 200L;
       System.out.println(c.equals(200));//false
       System.out.println(c.equals(200L));//true
   }
-  ````
-  
+````
+
 在上述代码中，200 被装箱成 `Integer`，`200L` 被装箱成 `Long`
 
 ***
