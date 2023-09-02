@@ -20,11 +20,7 @@
 
 #### 数据类型
 
-> `Kotlin` 语法层面，取消了基本数据类型
->
-> 但是以下类型的非空类型，会在编译时转为基本类型
-
-##### 1. 数值类型
+> 数值类型
 
 * `Byte`：字节，1 字节
 * `Short`：短整型，2 字节
@@ -55,15 +51,15 @@ val bytes = 0b11010010_01101001_10010100_10010010
 * `xor(bits)`：按位异或
 * `inv()`：非
 
-##### 2. 字符类型
+> 字符类型
 
 `Char`
 
-##### 3. 布尔类型
+> 布尔类型
 
 `Boolean`
 
-##### 4. 数组类型
+> 数组类型
 
 ````kotlin
 public class Array<T> {
@@ -79,7 +75,7 @@ public class Array<T> {
 }
 ````
 
-##### 5. 字符串类型
+> 字符串类型
 
 `String`，`Kotlin` 中有两种字符串字面量：
 
@@ -111,6 +107,66 @@ println("$s.length is ${s.length}") // 输出 "abc.length is 3"
 * `==`：等价于 `equals()`，很多情况下使用的是 `==`，因为对于浮点类型，`equals()` 的实现不遵循 `IEEE 754` 浮点运算标准
 
 * `===`：用于比较对象的引用是否指向同一个对象，运行时如果是基本数据类型 `===` 等价于 `==`
+
+***
+
+#### 泛型
+
+`Kotlin` 的泛型与 `Java` 的泛型非常相似，这里仅描述 `Kotlin` 的不同之处
+
+> `out` 与 `in`
+
+* `out` 使得泛型支持协变，等同于 `Java` 中的 `? extends`，只能读不能写
+* `in` 使得泛型支持，等同于 `Java` 中的 `? super`，只能写不能读
+
+注意，除了用于方法参数的声明，`out` 和 `in` 还可以用于声明类，例如 `Kotlin` 源码中的 `List` 接口
+
+````kotlin
+/**
+ * 该接口中的方法仅支持对列表的只读访问
+ */
+public interface List<out E> : Collection<E> {
+    
+}
+````
+
+> `*`
+
+`*` 相当于 `out Any`
+
+> `reified`
+
+由于 `Java` 泛型存在类型擦除的情况，任何在运行时需要知道泛型确切类型信息的操作都没法用了，比如你不能检查一个对象是否为泛型类型 `T` 的实例：
+
+````java
+public <T> void printIfTypeMatch(Object item) {
+    if (item instanceof T) { // 编译失败，illegal generic type for instanceof
+        System.out.println(item);
+    }
+}
+````
+
+这个问题，在 `Java` 中的解决方案通常是额外传递一个 `Class<T>` 类型的参数，然后通过 `Class#isInstance` 方法来检查：
+
+```java
+<T> void check(Object item, Class<T> type) {
+    if (type.isInstance(item)) {
+        System.out.println(item);
+    }
+}
+```
+
+`Kotlin` 中同样可以这么解决，不过还有一个更方便的做法：使用关键字 `reified` 配合 `inline` 来解决：
+
+```kotlin
+inline fun <reified T> printIfTypeMatch(item: Any) {
+    if (item is T) { 
+        println(item)
+    }
+}
+```
+
+简单来说就是内联函数会被铺平到调用处，所以具体是什么类型也就显而易见啦
 
 ***
 
