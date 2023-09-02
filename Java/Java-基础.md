@@ -248,7 +248,7 @@ public boolean equals(Object obj) {
 
 * `Integer` 用 `==` 与 `equals()` 区别
 
-  由于 `Integer` 是引用类型，所以 `==` 比较的是 `Integer` 对象所在的堆内存地址是否相同，同时需要注意的是，采用 `Integer.value(int)` 在 `-128 ~ 127` 获取到的 `Integer` 对象是缓存中的对象
+  由于 `Integer` 是引用类型，所以 `==` 比较的是 `Integer` 对象所在的堆内存地址是否相同，同时需要注意的是，采用 `Integer.valueOf(int)` 在 `-128 ~ 127` 获取到的 `Integer` 对象是缓存中的对象
 
   `Integer` 重写了 `equals()`
 
