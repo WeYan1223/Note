@@ -1,6 +1,6 @@
 #### 修饰符
 
-`Java` 提供了四种可见性修饰符：`public`、``、`protected` 以及默认修饰（即不加修饰）
+`Java` 提供了四种可见性修饰符：`public`、`private`、`protected` 以及默认修饰（即不加修饰）
 
 > 最外层声明
 
@@ -27,7 +27,7 @@ class Main {
 > 类内部声明
 
 - `public`：随处可见
-- `private`：子类可见
+- `private`：类内部可见
 - `protected`：类内部可见、子类可见
 - 不修饰：本包可见
 
