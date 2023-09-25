@@ -566,6 +566,7 @@ public final class MessageQueue {
             // 如果是负数，表示一直阻塞
             nativePollOnce(ptr, nextPollTimeoutMillis);
             synchronized (this) {
+                final long now = SystemClock.uptimeMillis();
                 //==========START==========
                 Message prevMsg = null;
                 Message msg = mMessages;
@@ -578,15 +579,17 @@ public final class MessageQueue {
                 }
                 //===========END===========
 
-                final long now = SystemClock.uptimeMillis();
-                Message msg = mMessages;
                 if (msg != null) {
                     if (now < msg.when) {
                         // 还没到当前消息得预期处理时间，设置线程得阻塞时间为：预期时间 - 当前时间
                         nextPollTimeoutMillis = (int) Math.min(msg.when - now, Integer.MAX_VALUE);
                     } else {
                         // 出队
-                        mMessages = msg.next;
+                        if (prevMsg != null) {
+                            prevMsg.next = msg.next;
+                        } else {
+                            mMessages = msg.next;
+                        }
                         msg.next = null;
                         return msg;
                     }
@@ -683,9 +686,7 @@ public void removeSyncBarrier(int token) {
 
 **实际应用：**
 
-手机屏幕刷新频率有不同的类型，60Hz、120Hz等。60Hz表示屏幕在一秒内刷新60次，也就是每隔16.6ms刷新一次，屏幕会在每次刷新的时候发出一个 `VSYNC` 信号，通知 CPU 进行绘制计算
-
-`View` 绘制的起点是在 `ViewRootImpl.requestLayout()` 方法开始，在这之后并不会马上开始进行绘制任务，而是会给主线程设置一个同步屏障，并设置 VSYNC 信号监听， 当 VSYNC 信号的到来，发送一个异步消息到主线程 `Handler`，来执行绘制任务，并移除同步屏障，这样可以保证在 VSYNC 信号到来之时，绘制任务可以被及时执行，不会造成界面卡顿
+当调用 `View.resquestLayout()`，会一直往上调用直到 `ViewRootImpl.requestLayout()`，在这之后并不会马上进行绘制任务，而是会给主线程发一个同步屏障，当下一次屏幕刷新信号到来才发送异步消息（消息内容为执行绘制任务）到主线程，来执行绘制任务，这样可以保证在屏幕刷新信号到来时，绘制任务可以被及时执行，不会造成界面卡顿
 
 ***
 
