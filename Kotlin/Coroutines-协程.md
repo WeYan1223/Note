@@ -73,7 +73,7 @@ handler.post {
 }
 ````
 
-
+### 2.1 launch
 
 `Kotlin` 启动协程写法：
 
@@ -108,6 +108,31 @@ public val IO: CoroutineDispatcher = DefaultIoScheduler
 `Dispatchers.Main` 顾名思义，可以将任务扔到主线程去执行，通常使用 `Dispatchers.Main.immediate`，因为它会先判断当前是否已经处于主线程，若是则直接执行任务，否则才扔到主线程。
 
 `Unconfined` 基本用不上
+
+### 2.2 async
+
+`async` 和 `launch` 都能启动协程，不一样在于 `launch` 返回 `Job`、`async` 返回 `Deffered<T>`
+
+```kotlin
+public interface Deferred<out T> : Job {
+    
+    public suspend fun await(): T
+    
+    ...
+}
+```
+
+`async` 可以看作是增强版 `launch`，支持获取协程的返回值，通常适用于这种场景：对于两个并行的请求，在请求结果都返回了之后，合并结果
+
+````kotlin
+launch(Dispatchers.IO) {
+    val deffered1 = async(Dispatchers.IO) { network1() }
+    val deffered2 = async(Dispatchers.IO) { network2() }
+    // await的作用是获取协程的返回结果，如果还没有返回则先挂起协程
+    // 所以这种方式的最长耗时取决于两个请求中耗时最长的一个
+    val result = deffered1.await() + deffered2.await()
+}
+````
 
 
 
@@ -173,7 +198,21 @@ fun main() {
 
 ### 3.2 编译后
 
+> 通过协程的挂起函数，编码时可以避免回调的写法，而挂起函数实际上是通过干预编译过程来实现的，本质上还是回调。
 
+#### 3.2.1 思想
+
+对于一个挂起函数，会被拆分重组为一个状态机
+
+
+
+
+
+
+
+
+
+#### 3.2.2 伪代码
 
 
 
@@ -205,19 +244,75 @@ fun main() {
 
 # 4. 结构化并发
 
+> * 挂起函数简化了并发任务的代码结构，面向的是并发任务的写法
+>
+> * 结构化并发面向的是并发任务的管理、
+>
+> 把协程以及子协程理解为二叉树的结构，那么结构化并发的重点主要在于：**协程发生异常，异常如何传递？异常如何处理？对父协程和兄弟协程有什么影响？**
 
+协程需要由 `CoroutineScope` 来启动，其中一个原因是 `CoroutineScope` 能提供一堆上下文给协程使用，最典型的就是提供 `ContinuationInteceptor` 来做线程管理，另外一个重要原因是 `CoroutineScope` 提供了**取消协程**的能力
 
+`CoroutineScope#launch()` 返回 `Job` 对象：
 
+```kotlin
+public fun CoroutineScope.launch(
+    context: CoroutineContext = EmptyCoroutineContext,
+    start: CoroutineStart = CoroutineStart.DEFAULT,
+    block: suspend CoroutineScope.() -> Unit
+): Job {
+    ...
+}
+```
 
+`Job` 对象的作用是取消协程：
 
+````kotlin
+class MainActivity : AppCompatActivity() {
+    val scope = CoroutineScope(Dispatchers.Main)
+    var job: Job? = null
+    
+    override fun onCreate(savedInstanceState: Bundle?) {
+        ...
+        job = scope.launch { // 返回Job对象
+            
+        }
+    }
+    
+    override fun onDestroy() {
+        ...
+        job?.cancel() // 适当时机取消协程
+    }
+}
+````
 
+除了 `Job` 对象，`CoroutineScope` 也提供了取消协程的函数：
 
+````kotlin
+class MainActivity : AppCompatActivity() {
+    val scope = CoroutineScope(Dispatchers.Main)
+    
+    override fun onCreate(savedInstanceState: Bundle?) {
+        ...
+        scope.launch { // 返回Job对象
+            
+        }
+    }
+    
+    override fun onDestroy() {
+        ...
+        scope.cancel() // 适当时机取消协程
+    }
+}
+````
+
+两者的区别在于：
+
+* `Job` 取消的是启动的那个协程以及子协程
+* `CoroutineScope` 取消的是启动的所有协程以及子协程
 
 
 
 # 5. 最佳实践
-
-> 仅针对 `Android` 应用开发的最佳实践
 
 实际开发中，通常不会使用自定义的 `CoroutineScope` 来启动协程：
 
@@ -298,6 +393,93 @@ class MainViewModel: ViewModel() {
     }
 }
 ```
+
+### 5.3 suspendCoroutine
+
+协程出现之前，异步操作基本都是用传统的线程回调写法：
+
+````kotlin
+fun networkFunc(callback :((Response) -> Unit)) {
+    okHttpClient.newCall(request).enqueue(object : Callback {
+        override fun onResponse(call: Call, response: Response) {
+            callback(response)
+        }
+    })
+}
+
+fun main() {
+    networdFunc { response ->
+        runOnUiThread {
+            updateUI(response)
+        }
+    }
+}
+````
+
+协程出现后，提供的 `suspendCoroutine()` 可以**将传统的回调式写法转换为协程写法**：
+
+````kotlin
+suspend fun networkFuncAsync(): Response = suspendCoroutine { continuation -> 
+	okHttpClient.newCall(request).enqueue(object : Callback {
+        override fun onResponse(call: Call, response: Response) {
+            continuation.resume(response)
+        }
+    })
+}
+
+suspend fun main() {
+    val response = networdFuncAsync()
+    updateUI()
+}
+````
+
+调用 `continuation.resume(response)` 后，`suspendCoroutine()` 这个挂起函数就结束返回 `response`。注意 `suspendCoroutine()` 包裹的协程体是不支持取消的，即使外部的 `CoroutineScope` 取消了，也不会影响内部代码执行，如果需要支持取消，使用 `suspendCancellableCoroutine()`。
+
+### 5.4 runBlocking
+
+`runBlocking()` 不是挂起函数，会启动一个新的协程，但会阻塞当前线程直到协程执行完毕，作用是将挂起函数转换为阻塞式的普通函数，让传统的线程写法的 API 去调用。主要应用场景应该是老的 `Java` 项目用到了新的 `Kotlin` 库，那么 `Kotlin` 库可以通过 `runBlocking()` 来兼容老项目。
+
+### 5.5 withContext
+
+`withContext` 用于切换协程的上下文，即当协程代码执行到 `withContext` 时，那么之后的协程代码将在 `withContext` 指定的上下文中执行。实际开发中通常使用 `withContext` 指定线程，现在有这么一个场景：
+
+> 一个函数中用 `withContext` 包裹住一段业务代码，当我要把这段业务代码抽为一个函数时，要不要把 `withContext` 也抽出来？
+
+ ````kotlin
+suspend fun doSomething() {
+    ...
+    withContext(Dispatchers.IO) {
+        // 业务代码
+    }
+    ...
+}
+ ````
+
+通常是要把 `withContext` 也抽出来的，因为 `withContext` 和它包裹的业务代码注定是绑定的，例如假如业务代码是耗时的计算任务，那必须得在 `Dispatchers.DEFAULT` 类型的线程池中运行，而假如业务代码是网络请求，那必须得在 `Dispatchers.IO` 类型的线程池中运行。如果不把 `withContext` 也包裹起来，就无法确定这段代码运行在哪种类型的线程池上了。
+
+> 但是，假如我本来就在 `Dispatchers.IO` 类型的线程池中运行了，又 `withContext(Dispatchers.IO)`，是不是意味着会存在不必要的线程切换而造成性能损耗呢？
+
+````kotlin
+fun main() {
+    CoroutineScope(Dispatchers.IO).launch {
+        doSomething()
+    }
+}
+
+suspend fun doSomething() {
+    ...
+    withContext(Dispatchers.IO) {
+        // 业务代码
+    }
+    ...
+}
+````
+
+实际上是不会造成性能损耗的，因为协程库对这种情况做了针对的优化：如果切换上下文时，`ContinationInterceptor` 并没有改变，那么就不会切线程，而是直接保持在原来的线程上继续执行。
+
+
+
+
 
 
 
